@@ -1,4 +1,5 @@
 module memory_stage(
+    input wire mem_clk,
     input wire select, //1 - d_pc, 0 - addr_in
     input wire [29:0] d_pc,
     input wire [29:0] addr_in,
@@ -14,7 +15,7 @@ assign sram_address = select ? d_pc : addr_in[11:0];
 
 sram memory_sram (
     .address(sram_address),
-    .inclock(master.mem_clk),
+    .inclock(mem_clk),
     .data(data_in),
     .wren(mem_wren),
     .q(out)

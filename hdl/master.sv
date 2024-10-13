@@ -4,13 +4,17 @@
 module master (
     input external_clk,
     input rst,
-    output [31:0] debug_hex_display
+    output [31:0] debug_hex_display,
+    output [4:0] full_bit_led,
+	 output clock_led
 );
 
 // Clock definitions
 wire clk, mem_clk;
 assign mem_clk = external_clk;
 clock_div divider(mem_clk, clk);
+
+assign clock_led = clk;
 
 // Pipeline control signals
 wire [4:0] full_bits;
@@ -50,12 +54,14 @@ forwarding forwarder (
 wire [31:0] i_fetch, i_decoder, i_mem;
 
 fetch_stage fetch(
+    .clk(clk),
+    .rst(rst),
     .i_mem(i_mem),
     .i_fetch(i_fetch)
 );
 
 // Decode
-wire [31:0] next_pc, pc, d_pc;
+wire [31:0] next_pc, pc/* synthesis keep */, d_pc/* synthesis keep */;
 
 wire [31:0] a_decoder, a_decoder_undel, a_gpr;
 wire [31:0] b_decoder, b_decoder_undel, b_gpr;
@@ -74,7 +80,6 @@ decode_stage decode(
     .next_pc(next_pc),
     .rs(ra1),
     .rt(ra2),
-    .i_decoder(i_decoder),
     .a_forwarded(a_decoder_undel), 
     .b_forwarded(b_decoder_undel),
     .decoder_packed(decoder_packed)
@@ -126,6 +131,7 @@ decoder_deconcat exec_dec(
 
 `ifdef HARDWARE
 memory_stage memory(
+    .mem_clk(mem_clk),
     .select(~load_write_predicate),
     .d_pc(full_bits[0] ? pc[31:2] : d_pc[31:2]),
     .addr_in(ea_execute[31:2]),
@@ -174,6 +180,8 @@ writeback_stage writeback(
 );
 
 gpr genreg(
+    .clk(clk),
+    .rst(rst),
     .we(gp_we_memory),
     .ra1(ra1),
     .ra2(ra2),
@@ -183,5 +191,8 @@ gpr genreg(
     .wd(gpr_data_in),
     .register_out(debug_hex_display)
 );
+
+// Periphery
+assign full_bit_led = full_bits;
 
 endmodule

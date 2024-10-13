@@ -8,7 +8,6 @@ module decode_stage(
     input [31:0] alu_res_memory,
     output [31:0] next_pc,
     output [4:0] rs, rt,
-    output [31:0] i_decoder,
     output [31:0] a_forwarded, b_forwarded,
     output [38:0] decoder_packed
 );

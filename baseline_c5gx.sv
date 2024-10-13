@@ -1,6 +1,6 @@
 //`define ENABLE_DDR2LP
 //`define ENABLE_SRAM
-`define HARDWARE
+// `define HARDWARE
 
 module baseline_c5gx(
     ///////// CLOCK /////////
@@ -63,9 +63,11 @@ module baseline_c5gx(
 wire [31:0] hex_value;
 
 master mstr(
-    .external_clk(CLOCK_125_p),
+    .external_clk(KEY[0]),
     .rst(SW[0]),
-    .debug_hex_display(hex_value)
+    .debug_hex_display(hex_value),
+    .full_bit_led(LEDG[4:0]),
+	 .clock_led(LEDR[0])
 );
 
 endmodule
