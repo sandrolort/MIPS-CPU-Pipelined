@@ -43,7 +43,10 @@ decoder_concat concat_inst (
     .bf(bf),
     .pc_mux_select(pc_mux_select),
     .mem_wren(mem_wren),
-    .packed_out(out_data_packed)
+    .packed_out(out_data_packed),
+    .rs(rs),
+    .rt(rt),
+    .rd(rd)
 );
 
 function [1:0] Type(input [5:0] instruction);
@@ -62,12 +65,12 @@ function [0:0] IsWritten(input [5:0] opc, input [5:0] fun);
     endcase
 endfunction
 
-function [1:0] WhereFrom(input [2:0]ttype, input [5:0] opc, input [3:0]fun);
+function [1:0] WhereFrom(input [2:0]ttype, input [5:0] opc, input [5:0]fun);
     case(ttype)
         2'b10: casez(fun)
-            6'b001001: WhereFrom = 2'b11;
-            6'b000010, 6'b000011: WhereFrom = 2'b10;
-            default: WhereFrom = 2'b00;
+            6'b001001: WhereFrom = 2'b11; // PC
+            6'b000010, 6'b000011: WhereFrom = 2'b10; //Shift
+            default: WhereFrom = 2'b00; // ALU
         endcase
         2'b00: if(opc == 6'b100011) WhereFrom = 2'b01; //Memory
                 else casez (opc)

@@ -1,7 +1,6 @@
 // Branch Condition Evaluation unit
 module bce (
-	input  [31:0] a,
-	input  [31:0] b,
+	input  [31:0] a, b,
 	input  [3:0] bf,
 	output bcres
 );

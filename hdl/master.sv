@@ -1,9 +1,6 @@
 // Page 166, "A Pipelined Multi-core MIPS Machine Hardware Implementation and Correctness Proof"
-// All registers that come out of cir-s themselves are delayed in-module
-// All other registers, such as con.2/3/4, C.4, ea.4 - are delayed in master module.
 // All wires, with their own successors, are declared together. That's why there's i_decoder in the 
-// fetch region of the master module.
-
+// fetch region of the master module, for example.
 module master (
     input external_clk,
     input rst,
@@ -15,8 +12,42 @@ wire clk, mem_clk;
 assign mem_clk = external_clk;
 clock_div divider(mem_clk, clk);
 
+// Pipeline control signals
+wire [4:0] full_bits;
+wire [1:0] forward_a, forward_b;
+wire [4:0] ra1_decoder, ra2_decoder;
+wire [4:0] ra1, ra2;
+wire gp_we_execute, gp_we_memory;
+wire [4:0] cad_execute, cad_memory;
+wire [31:0] alu_res, alu_res_execute, alu_res_memory;
+wire [1:0] gp_mux_sel_mem;
+
+wire mem_wren;
+wire load_write_predicate = mem_wren || gp_mux_sel_mem == 2'b01;
+
+// Instantiate full_bits_register
+stall_engine staller (
+    .clk(clk),
+    .rst(rst),
+    .load_write_predicate(load_write_predicate),
+    .full_bits(full_bits)
+);
+
+// Instantiate forwarding unit
+forwarding forwarder (
+    .full_bits(full_bits),
+    .rs_decode(ra1),
+    .rt_decode(ra2),
+    .cad_execute(cad_execute),
+    .cad_memory(cad_memory),
+    .gp_we_execute(gp_we_execute),
+    .gp_we_memory(gp_we_memory),
+    .forward_a(forward_a),
+    .forward_b(forward_b)
+);
+
 // Fetch
-wire [31:0] i_fetch, i_decoder, i_ex, i_mem;
+wire [31:0] i_fetch, i_decoder, i_mem;
 
 fetch_stage fetch(
     .i_mem(i_mem),
@@ -24,38 +55,47 @@ fetch_stage fetch(
 );
 
 // Decode
-wire [31:0] pc, d_pc;
+wire [31:0] next_pc, pc, d_pc;
 
-wire [4:0] ra1_decoder, ra2_decoder;
-wire [31:0] a_decoder, a_gpr;
-wire [31:0] b_decoder, b_gpr;
+wire [31:0] a_decoder, a_decoder_undel, a_gpr;
+wire [31:0] b_decoder, b_decoder_undel, b_gpr;
 wire [31:0] link_addr_decoder, link_addr_execute, link_addr_memory;
-wire [38:0] decoder_packed_decoder, decoder_packed_execute, decoder_packed_memory;
+wire [38:0] decoder_packed, decoder_packed_decoder, decoder_packed_execute, decoder_packed_memory;
 
 decode_stage decode(
     .a_gpr(a_gpr),
     .b_gpr(b_gpr),
-    .i_fetch(i_fetch),
     .pc(pc),
-    .d_pc(d_pc),
-    .rs(ra1_decoder),
-    .rt(ra2_decoder),
+    .i_fetch(i_fetch),
+    .forward_a(forward_a),
+    .forward_b(forward_b),
+    .alu_res_execute(alu_res_execute),
+    .alu_res_memory(alu_res_memory),
+    .next_pc(next_pc),
+    .rs(ra1),
+    .rt(ra2),
     .i_decoder(i_decoder),
-    .a_decoder(a_decoder), 
-    .b_decoder(b_decoder),
-    .link_addr_del(link_addr_decoder),
-    .decoder_packed_del(decoder_packed_decoder)
+    .a_forwarded(a_decoder_undel), 
+    .b_forwarded(b_decoder_undel),
+    .decoder_packed(decoder_packed)
 );
 
+delay pc_delay      (clk, rst, ~full_bits[0], next_pc, pc);
+delay link_delay    (clk, rst, ~full_bits[1], pc+32'd8, link_addr_decoder);
+delay i2_ex_delay   (clk, rst, ~full_bits[1], i_fetch, i_decoder);
+delay a_delay       (clk, rst, ~full_bits[1], a_decoder_undel, a_decoder);
+delay b_delay       (clk, rst, ~full_bits[1], b_decoder_undel, b_decoder);
+delay #(5) rs_del   (clk, rst, ~full_bits[1], ra1, ra1_decoder);
+delay #(5) rt_del   (clk, rst, ~full_bits[1], ra2, ra2_decoder);
+delay #(.default_value(4)) d_pc_delay (clk, rst, ~full_bits[1], pc, d_pc);
+delay #(39) decoder_delay (clk, rst, ~full_bits[1], decoder_packed, decoder_packed_decoder);
+
 // Execute
-wire [31:0] alu_res_execute, alu_res_memory;
 wire [31:0] shift_res_execute, shift_res_memory;
 wire [31:0] dm_in;
-wire [31:0] ea_execute, ea_memory;
+wire [31:0] ea, ea_execute, ea_memory;
+wire [31:0] mem_out_live, mem_out_memory;
 wire ovfalu;
-
-delay #(38) con3(clk, rst, decoder_packed_decoder, decoder_packed_execute);
-delay c3lnk (clk, rst, link_addr_decoder, link_addr_execute);
 
 execute_stage execute(
     .decoder_packed_decoder(decoder_packed_decoder),
@@ -63,55 +103,65 @@ execute_stage execute(
     .b_decoder(b_decoder),
     .i_decoder(i_decoder),
     .pc(pc),
-    .alu_res(alu_res_execute),
+    .alu_res(alu_res),
     .shift_res(shift_res_execute),
     .dm_in(dm_in),
-    .ea(ea_execute),
+    .ea(ea),
     .ovfalu(ovfalu)
 );
 
+delay #(39) con3(clk, rst, ~full_bits[2], decoder_packed_decoder, decoder_packed_execute);
+delay c3lnk (clk, rst, ~full_bits[2], link_addr_decoder, link_addr_execute);
+delay alu_res_del (clk, rst, ~full_bits[2], alu_res, alu_res_execute);
+delay ea_delay(clk, rst, ~full_bits[2], ea, ea_execute);
+
 // Memory
-delay #(38) con4(clk, rst, decoder_packed_execute, decoder_packed_memory);
-delay ea4 (clk, rst, ea_execute, ea_memory);
-delay c4lnk (clk, rst, link_addr_execute, link_addr_memory);
-delay c4alures (clk, rst, alu_res_execute, alu_res_memory);
-delay c4shfres (clk, rst, shift_res_execute, shift_res_memory);
+decoder_deconcat exec_dec(
+    .packed_in(decoder_packed_execute), 
+    .mem_wren(mem_wren),
+    .cad(cad_execute),
+    .gp_mux_sel(gp_mux_sel_mem),
+    .gp_we(gp_we_execute)
+);
 
-wire [31:0] mem_out_live, mem_out_memory;
-wire mem_wren;
-decoder_deconcat exec_dec(.packed_in(decoder_packed_execute), .mem_wren(mem_wren));
-
-`ifndef SIMULATION
+`ifdef HARDWARE
 memory_stage memory(
-    .select(1), //todo add stall engine and fix this.
-    .d_pc(d_pc),
-    .addr_in(ea_execute),
+    .select(~load_write_predicate),
+    .d_pc(full_bits[0] ? pc[31:2] : d_pc[31:2]),
+    .addr_in(ea_execute[31:2]),
     .data_in(dm_in),
     .mem_wren(mem_wren),
-    .out(mem_out_live),
-    .out_delayed(mem_out_memory)
+    .out(mem_out_live)
 );
 `else
 memory_stage_mock memory(
-    .clk(clk),
-    .rst(rst),
-    .out(mem_out_live),
-    .out_delayed(mem_out_memory)
+    .select(~load_write_predicate),
+    .d_pc(full_bits[0] ? pc[31:2] : d_pc[31:2]),
+    .addr_in(ea_execute[31:2]),
+    .data_in(dm_in),
+    .mem_wren(mem_wren),
+    .out(mem_out_live)
 );
 `endif
+
+delay mem_out_del (clk, rst, ~full_bits[3], mem_out_live, mem_out_memory);
+delay #(39) con4(clk, rst, ~full_bits[3], decoder_packed_execute, decoder_packed_memory);
+delay ea4 (clk, rst, ~full_bits[3], ea_execute, ea_memory);
+delay c4lnk (clk, rst, ~full_bits[3], link_addr_execute, link_addr_memory);
+delay c4alures (clk, rst, ~full_bits[3], alu_res_execute, alu_res_memory);
+delay c4shfres (clk, rst, ~full_bits[3], shift_res_execute, shift_res_memory);
 
 assign i_mem = mem_out_live; //todo
 
 // Writeback
-wire [4:0] cad_writeback;
-wire gp_we_writeback;
 wire [1:0] gpr_mux_sel;
 wire [31:0] gpr_data_in;
+
 decoder_deconcat mem_dec(
     .packed_in(decoder_packed_memory), 
     .gp_mux_sel(gpr_mux_sel),
-    .cad(cad_writeback),
-    .gp_we(gp_we_writeback)
+    .cad(cad_memory),
+    .gp_we(gp_we_memory)
 );
 
 writeback_stage writeback(
@@ -124,10 +174,10 @@ writeback_stage writeback(
 );
 
 gpr genreg(
-    .we(gp_we_writeback),
-    .ra1(ra1_decoder),
-    .ra2(ra2_decoder),
-    .wa(cad_writeback),
+    .we(gp_we_memory),
+    .ra1(ra1),
+    .ra2(ra2),
+    .wa(cad_memory),
     .rd1(a_gpr),
     .rd2(b_gpr),
     .wd(gpr_data_in),

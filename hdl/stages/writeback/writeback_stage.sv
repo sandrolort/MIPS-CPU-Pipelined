@@ -9,8 +9,8 @@ module writeback_stage(
 
 assign gpr_data_in = 
     (gp_mux_sel == 2'b00) ? alu_res :
-    (gp_mux_sel == 2'b01) ? shift_res :
-    (gp_mux_sel == 2'b10) ? memory_out :
+    (gp_mux_sel == 2'b01) ? memory_out :
+    (gp_mux_sel == 2'b10) ? shift_res :
     (gp_mux_sel == 2'b11) ? link_addr_memory :
     32'b0;
 

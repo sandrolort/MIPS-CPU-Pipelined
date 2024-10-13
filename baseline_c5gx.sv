@@ -1,5 +1,6 @@
 //`define ENABLE_DDR2LP
 //`define ENABLE_SRAM
+`define HARDWARE
 
 module baseline_c5gx(
     ///////// CLOCK /////////

@@ -8,7 +8,7 @@ module execute_stage(
     output [31:0] ea,
     output ovfalu
 );
-    
+
 wire [5:0] opc, fun;
 wire [4:0] rs, rt, rd, sa;
 wire [15:0] imm;
@@ -17,22 +17,16 @@ splitter splt(i_decoder, opc, fun, rs, rt, rd, sa, imm, iindex);
 
 wire [31:0] imm_extended = {{16{imm[15]}}, imm};
 wire [31:0] alu_b;
-
 wire [3:0] af;
 wire i, alu_mux_sel;
 wire [2:0] shift_type;
+
 decoder_deconcat deconcat_inst (
     .packed_in(decoder_packed_decoder),
     .af(af),
     .i(i),
     .alu_mux_sel(alu_mux_sel),
-    .shift_type(shift_type),
-    .cad(),
-    .gp_we(),
-    .gp_mux_sel(),
-    .bf(),
-    .pc_mux_select(),
-    .mem_wren()
+    .shift_type(shift_type)
 );
 
 assign alu_b = alu_mux_sel ? imm_extended : b_decoder;
@@ -55,6 +49,6 @@ shifter shft (
     .res(shift_res)
 );
 
-assign ea = a_decoder + imm_extended;
+assign ea = a_decoder + imm_extended; //todo make it signed addition
 
 endmodule

@@ -4,14 +4,13 @@ module memory_stage(
     input wire [29:0] addr_in,
     input wire [31:0] data_in,
     input wire mem_wren,
-    output wire [31:0] out,
-    output wire [31:0] out_delayed
+    output wire [31:0] out
 );
 
 wire [11:0] sram_address;
 wire sram_wren;
 
-assign sram_address = addr_in[11:0];
+assign sram_address = select ? d_pc : addr_in[11:0];
 
 sram memory_sram (
     .address(sram_address),
@@ -20,7 +19,5 @@ sram memory_sram (
     .wren(mem_wren),
     .q(out)
 );
-
-delay mem_out_del (master.clk, master.rst, out, out_delayed);
 
 endmodule
